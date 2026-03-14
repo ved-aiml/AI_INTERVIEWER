@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import api from "../lib/axios";
 import RoundProgress from "../components/RoundProgress";
-import { Send, Bot, User, Loader2, Clock, Zap, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Send, Bot, User, Loader2, Clock, Zap, ShieldCheck, ShieldAlert, Mic, MicOff, Volume2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -28,9 +28,78 @@ export default function InterviewPage() {
   const [questionsPerRound, setQuestionsPerRound] = useState(3);
   const [showConsent, setShowConsent] = useState(false);
   const [trustScore, setTrustScore] = useState(100);
+  const [isListening, setIsListening] = useState(false);
 
   const chatEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const recognitionRef = useRef(null);
+
+  // Initialize Speech Recognition
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.lang = "en-US";
+      recognitionRef.current.continuous = false; // More stable than continuous: true on some networks
+      recognitionRef.current.interimResults = true;
+
+      recognitionRef.current.onresult = (event) => {
+        let finalTranscripts = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscripts += transcript + " ";
+          }
+        }
+        if (finalTranscripts) {
+          setInput(prev => (prev ? prev.trim() + " " : "") + finalTranscripts.trim());
+        }
+      };
+
+      recognitionRef.current.onerror = (event) => {
+        if (event.error === "network") {
+          setIsListening(false);
+          toast.error("Speech recognition network error. This browser feature usually requires internet access.", { id: "mic-network-err", duration: 5000 });
+        } else if(event.error !== "no-speech") {
+          setIsListening(false);
+          toast.error("Microphone error: " + event.error, { id: "mic-err" });
+        }
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+    }
+    
+    return () => {
+      if (recognitionRef.current) recognitionRef.current.stop();
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      toast.error("Speech recognition not supported in your browser.");
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      recognitionRef.current.start();
+      setIsListening(true);
+      toast.success("Microphone active... Make sure to speak clearly!", { icon: "🎤" });
+    }
+  };
+
+  const speakQuestion = (text) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const speech = new SpeechSynthesisUtterance(text);
+    speech.lang = "en-US";
+    speech.rate = 1;
+    speech.pitch = 1;
+    window.speechSynthesis.speak(speech);
+  };
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -69,6 +138,7 @@ export default function InterviewPage() {
       setRounds(res.data.rounds);
       setQuestionsPerRound(res.data.questionsPerRound);
       setMessages([{ type: "ai", text: res.data.question, round: res.data.currentRound }]);
+      speakQuestion(res.data.question);
     } catch (err) {
       if (err.response?.status === 401) {
         localStorage.removeItem("interviewiq_token");
@@ -211,6 +281,7 @@ export default function InterviewPage() {
           setMessages((prev) => [...prev, {
             type: "ai", text: res.data.nextQuestion, round: res.data.nextRound,
           }]);
+          speakQuestion(res.data.nextQuestion);
         }, 600);
       }
     } catch (err) {
@@ -465,6 +536,23 @@ export default function InterviewPage() {
           padding: "16px 24px", borderTop: "1px solid var(--border-color)",
           background: "rgba(10, 10, 26, 0.95)", backdropFilter: "blur(20px)",
         }}>
+          <div style={{ paddingBottom: "12px", display: "flex", gap: 12, maxWidth: 800, margin: "0 auto", justifyContent: "flex-end" }}>
+            <button 
+              onClick={() => speakQuestion(currentQuestion)} 
+              disabled={loading || isComplete}
+              style={{ padding: "8px 14px", borderRadius: 8, display: "flex", alignItems: "center", gap: 6, background: "var(--bg-card)", color: "var(--text-primary)", border: "1px solid var(--border-color)", cursor: "pointer" }}
+            >
+              <Volume2 size={16} /> Listen Question
+            </button>
+            <button 
+              onClick={toggleListening} 
+              disabled={loading || isComplete}
+              style={{ padding: "8px 14px", borderRadius: 8, display: "flex", alignItems: "center", gap: 6, background: isListening ? "rgba(239, 68, 68, 0.1)" : "rgba(108, 99, 255, 0.1)", color: isListening ? "var(--danger)" : "var(--accent-primary)", border: `1px solid ${isListening ? "rgba(239, 68, 68, 0.2)" : "rgba(108, 99, 255, 0.2)"}`, cursor: "pointer" }}
+            >
+              {isListening ? <MicOff size={16} /> : <Mic size={16} />} 
+              {isListening ? 'Stop Speaking...' : 'Start Speaking'}
+            </button>
+          </div>
           <div style={{ display: "flex", gap: 12, maxWidth: 800, margin: "0 auto" }}>
             <textarea
               ref={textareaRef}
