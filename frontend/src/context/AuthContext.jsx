@@ -7,8 +7,8 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const token = localStorage.getItem("interviewiq_token");
+  useEffect(() => { 
+    const token = localStorage.getItem("interviewiq_token");  // return token if it exists else null
     const savedUser = localStorage.getItem("interviewiq_user");
     if (token && savedUser) {
       setUser(JSON.parse(savedUser));

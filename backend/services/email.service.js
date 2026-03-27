@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 
 const getTransporter = () => {
   if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-    console.error("❌ Email credentials missing in .env: GMAIL_USER or GMAIL_APP_PASSWORD is not set.");
+    throw new Error("Email credentials missing: GMAIL_USER or GMAIL_APP_PASSWORD is not set in environment variables.");
   }
   
   return nodemailer.createTransport({
@@ -11,6 +11,9 @@ const getTransporter = () => {
       user: process.env.GMAIL_USER,
       pass: process.env.GMAIL_APP_PASSWORD,
     },
+    connectionTimeout: 10000, // 10 seconds to establish connection
+    greetingTimeout: 10000,   // 10 seconds for greeting
+    socketTimeout: 15000,     // 15 seconds for socket inactivity
   });
 };
 
@@ -47,5 +50,11 @@ export const sendInterviewLink = async (toEmail, candidateName, jobTitle, interv
     `,
   };
 
-  return transporter.sendMail(mailOptions);
+  // Wrap sendMail in a timeout to prevent indefinite hanging
+  const sendPromise = transporter.sendMail(mailOptions);
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error("Email sending timed out after 20 seconds")), 20000)
+  );
+  
+  return Promise.race([sendPromise, timeoutPromise]);
 };

@@ -32,15 +32,26 @@ export default function SendLinkModal({ isOpen, onClose, session }) {
     setSending(candidate._id);
     try {
       const interviewLink = `${window.location.origin}/interview/${session.shareableToken}`;
+      
+      // Add a 25-second timeout using AbortController
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      
       await api.post("/sessions/send-link", {
         email: candidate.email,
         candidateName: candidate.name,
         jobTitle: session.jobTitle,
         interviewLink
-      });
+      }, { signal: controller.signal });
+      
+      clearTimeout(timeoutId);
       toast.success(`Invite sent to ${candidate.name}!`);
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to send email");
+      if (err.name === "AbortError" || err.code === "ERR_CANCELED") {
+        toast.error("Request timed out. Please check email settings and try again.");
+      } else {
+        toast.error(err.response?.data?.message || "Failed to send email");
+      }
     } finally {
       setSending(null);
     }

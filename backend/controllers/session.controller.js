@@ -143,6 +143,12 @@ export const sendInterviewEmail = async (req, res) => {
     res.json({ message: "Email sent successfully" });
   } catch (error) {
     console.error("Send email error:", error.message);
-    res.status(500).json({ message: "Failed to send email. Check SMTP settings." });
+    if (error.message.includes("credentials missing")) {
+      res.status(503).json({ message: "Email service not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD." });
+    } else if (error.message.includes("timed out")) {
+      res.status(504).json({ message: "Email sending timed out. Please try again later." });
+    } else {
+      res.status(500).json({ message: "Failed to send email. Check SMTP settings." });
+    }
   }
 };
